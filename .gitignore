@@ -1,4 +1,6 @@
 *-test.gnucash
+*.gnucash.*.*.LNK
+*.LCK
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
