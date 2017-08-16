@@ -1,9 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # fiximports.py -- Categorize imported transactions according to user-defined
 #                  rules.
 #
 # Copyright (C) 2013 Sandeep Mukherjee <mukherjee.sandeep@gmail.com>
+# Copyright (C) 2017 Jorge Javier Araya Navarro <jorge@esavara.cr>
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
 # published by the Free Software Foundation; either version 2 of
@@ -24,6 +25,7 @@
 # @file
 #   @brief Categorize imported transactions according to user-defined rules.
 #   @author Sandeep Mukherjee <mukherjee.sandeep@gmail.com>
+#   @author Jorge Javier Araya Navarro <jorge@esavara.cr>
 #
 # When GnuCash imports a OFX/QFX file, it adds all transactions to an
 # "Imbalance" account, typically "Imbalance-USD" (unless Bayesian matching
@@ -38,16 +40,31 @@
 VERSION = "0.3Beta"
 
 # python imports
+import sys
 import argparse
 import logging
 from datetime import date
+from decimal import Decimal, DecimalException
 import re
 
 # gnucash imports
 from gnucash import Session
 
+# Account name, Pattern, debit min-max, credit min-max
+matcher = re.compile(r"^([^\t\n\r\f\v]+)\t+([^\t\n\r\f\v]+)")
+numbers = re.compile(r"(\d+((\.|,)\d+)?)\t?")
+
 
 def account_from_path(top_account, account_path, original_path=None):
+    """Get Account object by its path as `example:path`
+
+    :param top_account: Account
+    :param account_path: path expressed as ["example", "path"]
+    :param original_path: Original path, optional.
+    :returns: The Account referred by the `account_path`
+    :rtype: gnucash.gnucash_core.Account
+
+    """
     if original_path is None:
         original_path = account_path
     account, account_path = account_path[0], account_path[1:]
@@ -72,31 +89,85 @@ def readrules(filename):
         for line in fd:
             line = line.strip()
             if line and not line.startswith('#'):
-                result = re.match(r"^(\S+)\s+(.+)", line)
-                if result:
-                    ac = result.group(1)
-                    pattern = result.group(2)
-                    compiled = re.compile(pattern)  # Makesure RE is OK
-                    rules.append((compiled, ac))
-                else:
-                    logging.warn('Ignoring line: (incorrect format): "%s"', line)
-    return rules
+                parsed = parserule(line)
+                if parsed:
+                    rules.append(parsed)
+        else:
+            return rules
 
 
-def get_ac_from_str(str, rules, root_ac):
-    for pattern, acpath in rules:
-        if pattern.search(str):
-            acplist = re.split(':', acpath)
-            logging.debug('"%s" matches pattern "%s"', str, pattern.pattern)
-            newac = account_from_path(root_ac, acplist)
-            return newac
-    return ""
+def parserule(rule):
+    result = []
+    # Find the account name and the pattern
+    match = matcher.match(rule)
+    if match:
+        ac = match.group(1)
+        pattern = match.group(2)
+        compiled = re.compile(pattern)  # Makesure RE is OK
+        result.append(compiled)
+        result.append(ac)
+        # Find the min-max for debit and credit columns
+        itermatch = numbers.finditer(rule, match.end(2))
+        nrules = [Decimal(float(x.group(1).replace(",", ".")) * 100)
+                  for x in itermatch]
+        for x in range(1, 4 - len(nrules) + 1):
+            nrules.append(None)
+        # Sanitize mins and maxs
+        dmin, dmax, cmin, cmax = nrules
+        if dmin is None:
+            dmin = Decimal(0)
+        if dmax is None or dmax <= dmin:
+            dmax = Decimal(sys.maxsize)
+        if cmin is None:
+            cmin = Decimal(0)
+        if cmax is None or cmax <= cmin:
+            cmax = Decimal(sys.maxsize)
+        result.extend([dmin, dmax, cmin, cmax])
+    else:
+        logging.warn(
+            'Ignoring line: (incorrect format): "%s"', rule)
 
-# Parses command-line arguments.
-# Returns an array with all user-supplied values.
+    return result
+
+
+def get_ac_from_str(concept, amount, rules, root_ac):
+    """Check account and fix it if match with a rule.
+
+    :param concept: Description of the account
+    :param rules: the list of defined rules
+    :param root_ac: an account from GNU Cash API
+    :returns: The new path of the account
+    :rtype: str or Account
+
+    """
+    for rule in rules:
+        pattern, acpath, dmin, dmax, cmin, cmax = rule
+        if pattern.search(concept):
+            match = False
+            # if negative, is a debit. If positive is a credit.
+            if amount < 0:
+                logging.debug("Is a debit: %s", concept)
+                pamount = Decimal(amount * -1)
+                match = pamount >= dmin and pamount <= dmax
+            else:
+                logging.debug("Is a credit: %s", concept)
+                match = amount >= cmin and amount <= cmax
+
+            if match:
+                acplist = re.split(':', acpath)
+                logging.debug('"%s" for %d matches pattern "%s":',
+                              concept, amount, pattern.pattern)
+                newac = account_from_path(root_ac, acplist)
+                return newac
+    else:
+        return ""
 
 
 def parse_cmdline():
+    """ Parses command-line arguments.
+
+    Returns an array with all user-supplied values.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--imbalance-ac', default="Imbalance-[A-Z]{3}",
                         help="Imbalance account name pattern. Default=Imbalance-[A-Z]{3}")
@@ -118,12 +189,80 @@ def parse_cmdline():
 
     return args
 
+
+def get_transaction_info(split):
+    """Return information and splits from a transaction
+
+    :param split: The split from an account
+    :returns: list of splits, date, description, memo and amount
+    :rtype: list, date.datetime, string, string, Decimal
+
+    """
+    trans = split.parent
+    splits = trans.GetSplitList()
+    trans_date = date.fromtimestamp(trans.GetDate())
+    trans_desc = trans.GetDescription()
+    trans_memo = trans.GetNotes()
+    trans_amount = Decimal(split.GetAmount().num())
+    return splits, trans_date, trans_desc, trans_memo, trans_amount
+
+
+def open_book(gnucashfile, account2fix):
+    """Read a GNU Cash file
+
+    :param gnucashfile: path to the GNU Cash file
+    :param account2fix: list with the path of the account
+    :returns: session object, root account and origin account
+    :rtype:
+
+    """
+    gnucash_session = Session(gnucashfile, is_new=False)
+    root_account = gnucash_session.book.get_root_account()
+    orig_account = account_from_path(root_account, account2fix)
+    return (gnucash_session, root_account, orig_account)
+
+
+def fix_account(imbalance, root, origin, use_memo, rules):
+    total = 0
+    imbalance_total = 0
+    fixed = 0
+    imbalance_pattern = re.compile(imbalance)
+    for split in origin.GetSplitList():
+        total += 1
+        # Get the transaction information
+        splits, trans_date, trans_desc, trans_memo, trans_amount\
+            = get_transaction_info(split)
+        for split in splits:
+            acname = split.GetAccount().GetName()
+            logging.debug('%s: %s => %s', trans_date, trans_desc, acname)
+            if imbalance_pattern.match(acname):
+                imbalance_total += 1
+                # Use the transaction description to match the rule pattern
+                search_str = trans_desc
+                if use_memo:
+                    # Use the memo field instead of the transaction
+                    # description
+                    search_str = trans_memo
+                # Calculate the transaction's new account
+                newac = get_ac_from_str(search_str, trans_amount,
+                                        rules, root)
+
+                # Check if transaction should be moved
+                if newac != "":
+                    logging.debug(
+                        '\tChanging account to: %s', newac.GetName())
+                    # Move the transaction to a new account
+                    split.SetAccount(newac)
+                    fixed += 1
+    else:
+        return (total, imbalance_total, fixed)
+
 # Main entry point.
 # 1. Parse command line.
 # 2. Read rules.
 # 3. Create session.
 # 4. Get a list of all splits in the account to be fixed. For every split:
-#     4.1: Lookup up description or memo fied.
+#     4.1: Lookup up description or memo field.
 #     4.2: Use the rules to check if a matching account can be located.
 #     4.3: If there is a matching account, set the account in the split.
 # 5. Print stats and save the session (if needed).
@@ -132,7 +271,7 @@ def parse_cmdline():
 def main():
     args = parse_cmdline()
     if args.version:
-        print VERSION
+        print(VERSION)
         exit(0)
 
     if args.verbose:
@@ -145,49 +284,14 @@ def main():
 
     rules = readrules(args.rulesfile)
     account_path = re.split(':', args.ac2fix)
-
-    gnucash_session = Session(args.gnucash_file, is_new=False)
-    total = 0
-    imbalance = 0
-    fixed = 0
-    try:
-        root_account = gnucash_session.book.get_root_account()
-        orig_account = account_from_path(root_account, account_path)
-
-        imbalance_pattern = re.compile(args.imbalance_ac)
-
-        for split in orig_account.GetSplitList():
-            total += 1
-            trans = split.parent
-            splits = trans.GetSplitList()
-            trans_date = date.fromtimestamp(trans.GetDate())
-            trans_desc = trans.GetDescription()
-            trans_memo = trans.GetNotes()
-            for split in splits:
-                ac = split.GetAccount()
-                acname = ac.GetName()
-                logging.debug('%s: %s => %s', trans_date, trans_desc, acname)
-                if imbalance_pattern.match(acname):
-                    imbalance += 1
-                    search_str = trans_desc
-                    if args.use_memo:
-                        search_str = trans_memo
-                    newac = get_ac_from_str(search_str, rules, root_account)
-                    if newac != "":
-                        logging.debug('\tChanging account to: %s', newac.GetName())
-                        split.SetAccount(newac)
-                        fixed += 1
-
-        if not args.nochange:
-            gnucash_session.save()
-
-        logging.info('Total splits=%s, imbalance=%s, fixed=%s', total, imbalance, fixed)
-
-    except Exception as ex:
-        logging.error(ex) 
-
-    gnucash_session.end()
-
+    session, root, origin = open_book(args.gnucash_file, account_path)
+    total, imbalance, fixed = fix_account(
+        args.imbalance_ac, root, origin, args.use_memo, rules)
+    if not args.nochange:
+        session.save()
+    session.end()
+    logging.info('Total splits=%s, imbalance=%s, fixed=%s',
+                 total, imbalance, fixed)
 
 
 if __name__ == "__main__":

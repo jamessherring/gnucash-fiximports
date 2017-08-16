@@ -1,12 +1,28 @@
-# This is a rules file for the fiximports script.
-# Lines beginning with a '#' are ignored. Blank lines are also ignored.
-# Each entry is in the format:
-# Account Pattern
-# Where Account is a colon(:) separated account path.
-# Format is a search pattern. Example:
-# Expenses:Dining PIZZA
-# Specifies that a transaction beginning with "PIZZA" sould go into the
-# "Expenses:Dining" account. Currently account names cannot have spaces in them.
-# (Uncomment the line below to activate this rule)
-Expenses:Dining PIZZA
-Income:Salary Salary
+# This is a rules file for the fiximports script.  Lines beginning
+# with a '#' are ignored. Blank lines are also ignored.  Each entry is
+# in the format:
+#
+# Account	Pattern	Debit min.	Debit max.	Credit min.	Credit max.
+#
+# *** Each column is separated with a tab (not spaces). ***
+
+# - Account is a colon(:) separated account path.
+# - Pattern is a valid Python regexp.
+# - Debit/Credit min/max is a number that express a range where
+#   the amount of the transaction is within. They are optional and to
+#   ignore a column you should put a 0 in it.
+
+# Rules shouldn't have overlapping ranges or otherwise your rules may
+# not work as expected, i.e.: the incorrect rule is being applied to a
+# transaction but you expected the rule that follows it to be applied
+# instead. Format is a search pattern. Example:
+
+# Expenses:Supplies	Random Store	2500
+
+# Specifies that a transaction beginning with "Random Store" starting
+# at 2500 and up should go into the "Expenses:Supplies"
+# account. Account names now can have spaces in them.
+Expenses:Dining	PIZZA
+Income:Salary	Salary
+Expenses:Dining	Random Store	0	10
+Expenses:Supplies	Random Store	200	300
