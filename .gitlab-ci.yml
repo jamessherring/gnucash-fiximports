@@ -4,7 +4,7 @@ before_script:
   # For testing, we need to build a fresh binary of GnuCash with Python bindings support straight
   # from the last stable release of GnuCash
   - apt-get update -qy
-  - apt-get install -y python-pip git automake intltool libtool swig xsltproc libglib2.0-dev libgtk2.0-dev guile-2.0-dev libgnomecanvas2-dev libart-2.0-dev libgoffice-0.10-dev libgoffice-0.10-10 libxml2-dev libxslt1-dev libwebkitgtk-dev  libboost-all-dev libofx-dev python-dev libisocodes-dev
+  - apt-get install -y python-pip git automake intltool libtool swig xsltproc libglib2.0-dev libgtk2.0-dev guile-2.0-dev libgnomecanvas2-dev libart-2.0-dev libgoffice-0.8-dev libgoffice-0.8-8 libxml2-dev libxslt1-dev libwebkitgtk-dev  libboost-all-dev libofx-dev python-dev libisocodes-dev
   - git clone https://github.com/Gnucash/gnucash.git
   # Enter into gnucash git repository and go to the last stable release
   - cd gnucash
