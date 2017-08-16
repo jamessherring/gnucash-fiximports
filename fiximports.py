@@ -5,10 +5,11 @@
 #
 # Copyright (C) 2013 Sandeep Mukherjee <mukherjee.sandeep@gmail.com>
 # Copyright (C) 2017 Jorge Javier Araya Navarro <jorge@esavara.cr>
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as
-# published by the Free Software Foundation; either version 2 of
-# the License, or (at your option) any later version.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,28 +17,39 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, contact:
-# Free Software Foundation           Voice:  +1-617-542-5942
-# 51 Franklin Street, Fifth Floor    Fax:    +1-617-542-2652
-# Boston, MA  02110-1301,  USA       gnu@gnu.org
-#
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # @file
 #   @brief Categorize imported transactions according to user-defined rules.
 #   @author Sandeep Mukherjee <mukherjee.sandeep@gmail.com>
 #   @author Jorge Javier Araya Navarro <jorge@esavara.cr>
 #
-# When GnuCash imports a OFX/QFX file, it adds all transactions to an
-# "Imbalance" account, typically "Imbalance-USD" (unless Bayesian matching
-# is enabled)
-# This script allows you to modify the target account according to rules
-# you create. For example, you can specify that a credit-card transaction
-# with a description starting with "PIZZA" be categorized as "Expenses:Dining".
-# To do this, you need to create a "rules" file first. See rules.txt for
-# more information on the format.
-# This script can search in the description or the memo fields.
+# This is a rules file for the fiximports script.  Lines beginning
+# with a '#' are ignored. Blank lines are also ignored.  Each entry is
+# in the format:
+#
+# Account	Pattern	Debit min.	Debit max.	Credit min.	Credit max.
+#
+# *** Each column is separated with a tab (not spaces). ***
 
-VERSION = "0.3Beta"
+# - Account is a colon(:) separated account path.
+# - Pattern is a valid Python regexp.
+# - Debit/Credit min/max is a number that express a range where
+#   the amount of the transaction is within. They are optional and to
+#   ignore a column you should put a 0 in it.
+#
+# Rules shouldn't have overlapping ranges or otherwise your rules may
+# not work as expected, i.e.: the incorrect rule is being applied to a
+# transaction but you expected the rule that follows it to be applied
+# instead. Format is a search pattern. Example:
+#
+# Expenses:Supplies	Random Store	2500
+#
+# Specifies that a transaction beginning with "Random Store" starting
+# at 2500 and up should go into the "Expenses:Supplies"
+# account. Account names now can have spaces in them.
+
+VERSION = "v1.0"
 
 # python imports
 import sys
@@ -79,11 +91,8 @@ def account_from_path(top_account, account_path, original_path=None):
 
 
 def readrules(filename):
-    '''Read the rules file.
-    Populate an list with results. The list contents are:
-    ([pattern], [account name]), ([pattern], [account name]) ...
-    Note, this is in reverse order from the file.
-    '''
+    """Read the rules file.
+    """
     rules = []
     with open(filename, 'r') as fd:
         for line in fd:
@@ -97,6 +106,11 @@ def readrules(filename):
 
 
 def parserule(rule):
+    """Parse a rule
+
+    :param rule: string
+
+    """
     result = []
     # Find the account name and the pattern
     match = matcher.match(rule)
