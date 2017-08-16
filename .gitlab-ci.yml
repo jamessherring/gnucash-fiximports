@@ -15,7 +15,8 @@ before_script:
   - ../configure --prefix=/usr/local --enable-debug --enable-compile-warnings --enable-python --enable-ofx --disable-dbi
   - make && make install
   # Install the requirements for testing the project
-  - pip install -r ../requirements.txt
+  - cd $CI_PROJECT_DIR
+  - pip install -r requirements.txt
 
 test:
   script:
