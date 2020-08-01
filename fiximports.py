@@ -217,7 +217,7 @@ def get_transaction_info(split):
     """
     trans = split.parent
     splits = trans.GetSplitList()
-    trans_date = date.fromtimestamp(trans.GetDate())
+    trans_date = trans.GetDate()
     trans_desc = trans.GetDescription()
     trans_memo = trans.GetNotes()
     trans_amount = Decimal(split.GetAmount().num())
