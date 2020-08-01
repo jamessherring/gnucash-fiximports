@@ -81,9 +81,9 @@ def account_from_path(top_account, account_path, original_path=None):
         original_path = account_path
     account, account_path = account_path[0], account_path[1:]
     account = top_account.lookup_by_name(account)
-    if account.get_instance() is None:
-        raise Exception(
-            "path " + ''.join(original_path) + " could not be found")
+    if (account is None or account.get_instance() is None):
+       logging.warning("path " + ''.join(original_path) + " could not be found")
+       return None
     if len(account_path) > 0:
         return account_from_path(account, account_path, original_path)
     else:
@@ -172,6 +172,9 @@ def get_ac_from_str(concept, amount, rules, root_ac):
                 logging.debug('"%s" for %d matches pattern "%s":',
                               concept, amount, pattern.pattern)
                 newac = account_from_path(root_ac, acplist)
+                if newac is None:
+                    logging.warning("Can't find account for path %s", acplist)
+                    return ""
                 return newac
     else:
         return ""
