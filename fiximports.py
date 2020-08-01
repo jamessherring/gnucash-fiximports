@@ -138,7 +138,7 @@ def parserule(rule):
             cmax = Decimal(sys.maxsize)
         result.extend([dmin, dmax, cmin, cmax])
     else:
-        logging.warn(
+        logging.warning(
             'Ignoring line: (incorrect format): "%s"', rule)
 
     return result
@@ -160,16 +160,16 @@ def get_ac_from_str(concept, amount, rules, root_ac):
             match = False
             # if negative, is a debit. If positive is a credit.
             if amount < 0:
-                logging.debug("Is a debit: %s", concept)
+                logging.info("Is a debit: %s", concept)
                 pamount = Decimal(amount * -1)
                 match = pamount >= dmin and pamount <= dmax
             else:
-                logging.debug("Is a credit: %s", concept)
+                logging.info("Is a credit: %s", concept)
                 match = amount >= cmin and amount <= cmax
 
             if match:
                 acplist = re.split(':', acpath)
-                logging.debug('"%s" for %d matches pattern "%s":',
+                logging.info('"%s" for %d matches pattern "%s":',
                               concept, amount, pattern.pattern)
                 newac = account_from_path(root_ac, acplist)
                 if newac is None:
@@ -251,9 +251,10 @@ def fix_account(imbalance, root, origin, use_memo, rules):
             = get_transaction_info(split)
         for split in splits:
             acname = split.GetAccount().GetName()
-            logging.debug('%s: %s => %s', trans_date, trans_desc, acname)
+            #logging.debug('%s: %s => %s', trans_date, trans_desc, acname)
             if imbalance_pattern.match(acname):
                 imbalance_total += 1
+                logging.debug('%s %s: %s => %s', trans_date, trans_amount, trans_desc, acname)
                 # Use the transaction description to match the rule pattern
                 search_str = trans_desc
                 if use_memo:
@@ -266,7 +267,8 @@ def fix_account(imbalance, root, origin, use_memo, rules):
 
                 # Check if transaction should be moved
                 if newac != "":
-                    logging.debug(
+                    logging.info('%s: %s => %s', trans_date, trans_desc, acname)
+                    logging.info(
                         '\tChanging account to: %s', newac.GetName())
                     # Move the transaction to a new account
                     split.SetAccount(newac)
